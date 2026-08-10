@@ -52,10 +52,25 @@ jobs:
       - run: uv run ruff format --check .
 
   # ---------------------------------------------------------------------------
-  # Type-check + testes — um job por serviço/pacote/worker (matriz), cada um
-  # isolado no seu próprio diretório (mesmo padrão usado durante o
-  # desenvolvimento: `cd <dir> && uv run mypy/pytest`, resolve certo contra o
-  # `uv.lock` único do workspace via `mypy_path`/workspace do `uv`).
+  # Type-check + testes — um job por serviço/pacote/worker (matriz).
+  # `pytest` sempre roda de dentro de `matrix.dir` (cada projeto resolve
+  # sua própria config via `pyproject.toml` local).
+  #
+  # `mypy` tem DOIS estilos de invocação, dependendo da categoria — não dá
+  # pra unificar num só, os dois foram testados ao vivo (local, reproduzindo
+  # o runner) e um quebra o outro:
+  #   - Serviços/`workers` (código interno usa `from src.x import y`,
+  #     prefixo "src." literal): `cd <dir> && mypy --strict src` — rodar
+  #     da RAIZ com o path completo (`mypy --strict services/x/src`)
+  #     resolve esse import errado nalguns casos (achado em `workers`:
+  #     dispara erros de tipo que não existem rodando do jeito certo).
+  #   - Pacotes compartilhados (`restaurant_core` etc., sem prefixo
+  #     "src."): o INVERSO — `cd packages/x && mypy --strict src` quebra
+  #     ("Source file found twice", mypy descobre o mesmo arquivo com dois
+  #     nomes de módulo via `mypy_path` da raiz); só funciona rodado da
+  #     raiz com o path completo até o pacote (`mypy --strict
+  #     packages/x/src/restaurant_x`). `mypy_target` fica vazio nos outros
+  #     — é o que decide qual dos dois passos abaixo roda.
   # ---------------------------------------------------------------------------
   python-services:
     name: ${{ matrix.name }}
@@ -64,27 +79,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # --- 12 microsserviços ---------------------------------------------
-          - { name: auth-service, dir: services/auth-service }
-          - { name: restaurant-service, dir: services/restaurant-service }
-          - { name: menu-service, dir: services/menu-service }
-          - { name: dining-service, dir: services/dining-service }
-          - { name: kitchen-service, dir: services/kitchen-service }
-          - { name: order-service, dir: services/order-service }
-          - { name: inventory-service, dir: services/inventory-service }
-          - { name: payment-service, dir: services/payment-service }
-          - { name: delivery-service, dir: services/delivery-service }
-          - { name: marketing-service, dir: services/marketing-service }
-          - { name: notification-service, dir: services/notification-service }
-          - { name: analytics-service, dir: services/analytics-service }
-          # --- workers (3 processos, 1 pacote) --------------------------------
-          - { name: workers, dir: workers }
-          # --- pacotes compartilhados ------------------------------------------
-          - { name: restaurant-core, dir: packages/core }
-          - { name: restaurant-security, dir: packages/security }
-          - { name: restaurant-database, dir: packages/database }
-          - { name: restaurant-common, dir: packages/common }
-          - { name: restaurant-events, dir: packages/events }
+          # --- 12 microsserviços + workers (estilo "cd + src") ----------------
+          - { name: auth-service, dir: services/auth-service, mypy_target: "" }
+          - { name: restaurant-service, dir: services/restaurant-service, mypy_target: "" }
+          - { name: menu-service, dir: services/menu-service, mypy_target: "" }
+          - { name: dining-service, dir: services/dining-service, mypy_target: "" }
+          - { name: kitchen-service, dir: services/kitchen-service, mypy_target: "" }
+          - { name: order-service, dir: services/order-service, mypy_target: "" }
+          - { name: inventory-service, dir: services/inventory-service, mypy_target: "" }
+          - { name: payment-service, dir: services/payment-service, mypy_target: "" }
+          - { name: delivery-service, dir: services/delivery-service, mypy_target: "" }
+          - { name: marketing-service, dir: services/marketing-service, mypy_target: "" }
+          - { name: notification-service, dir: services/notification-service, mypy_target: "" }
+          - { name: analytics-service, dir: services/analytics-service, mypy_target: "" }
+          - { name: workers, dir: workers, mypy_target: "" }
+          # --- pacotes compartilhados (estilo "raiz + path completo") ---------
+          - { name: restaurant-core, dir: packages/core, mypy_target: packages/core/src/restaurant_core }
+          - { name: restaurant-security, dir: packages/security, mypy_target: packages/security/src/restaurant_security }
+          - { name: restaurant-database, dir: packages/database, mypy_target: packages/database/src/restaurant_database }
+          - { name: restaurant-common, dir: packages/common, mypy_target: packages/common/src/restaurant_common }
+          - { name: restaurant-events, dir: packages/events, mypy_target: packages/events/src/restaurant_events }
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -101,9 +115,13 @@ jobs:
       # explicitamente primeiro (mesmo passo que o job `lint` já fazia).
       - name: Sync workspace (.venv compartilhado)
         run: uv sync --frozen
-      - name: mypy --strict
+      - name: mypy --strict (serviço/worker)
+        if: matrix.mypy_target == ''
         working-directory: ${{ matrix.dir }}
         run: uv run mypy --strict src
+      - name: mypy --strict (pacote compartilhado)
+        if: matrix.mypy_target != ''
+        run: uv run mypy --strict ${{ matrix.mypy_target }}
       - name: pytest
         working-directory: ${{ matrix.dir }}
         run: uv run pytest
