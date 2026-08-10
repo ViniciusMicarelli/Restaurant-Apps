@@ -113,8 +113,16 @@ jobs:
       # tinha sido sincronizada antes em algum momento da sessão; num
       # runner novo (CI) o `.venv` não existe ainda — precisa sincronizar
       # explicitamente primeiro (mesmo passo que o job `lint` já fazia).
+      # `--all-packages` (não só a raiz): o mypy dos 5 pacotes compartilhados
+      # roda a partir da raiz (ver comentário acima) — sem essa flag, o
+      # `uv sync` sozinho só instala as deps do projeto raiz (`dependencies
+      # = []`, vazio), nunca as de cada pacote (`pydantic`, que o próprio
+      # `[tool.mypy] plugins = ["pydantic.mypy"]` da raiz precisa carregar).
+      # Os serviços não sofriam disso porque `cd services/x && uv run` já
+      # sincroniza aquele membro específico sozinho — só os pacotes,
+      # invocados da raiz, dependiam de tudo já estar instalado de antemão.
       - name: Sync workspace (.venv compartilhado)
-        run: uv sync --frozen
+        run: uv sync --frozen --all-packages
       - name: mypy --strict (serviço/worker)
         if: matrix.mypy_target == ''
         working-directory: ${{ matrix.dir }}
