@@ -1,0 +1,123 @@
+# Dependabot — Restaurant Apps Platform.
+#
+# Cobre todos os ecossistemas do monorepo: uv (workspace Python, um
+# uv.lock só na raiz), npm (2 web apps + a raiz do Playwright), pub
+# (2 apps Flutter), docker (um diretório por Dockerfile — 12
+# microsserviços + workers + 2 web apps) e github-actions (versão das
+# actions usadas em .github/workflows/). Tudo mira `staging`, não
+# `main` direto — PRs de dependência passam pelo mesmo portão de CI
+# (.github/workflows/ci.yml) que qualquer outro PR antes de chegar em
+# produção.
+
+version: 2
+updates:
+- package-ecosystem: uv
+  directory: /
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: npm
+  directory: /apps/admin-web
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: npm
+  directory: /apps/customer-web
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: npm
+  directory: /
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: pub
+  directory: /apps/waiter-mobile
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: pub
+  directory: /apps/customer-mobile
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/auth-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/restaurant-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/menu-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/dining-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/kitchen-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/order-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/inventory-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/payment-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/delivery-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/marketing-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/notification-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /services/analytics-service
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /workers
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /apps/admin-web
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: docker
+  directory: /apps/customer-web
+  target-branch: staging
+  schedule:
+    interval: weekly
+- package-ecosystem: github-actions
+  directory: /
+  target-branch: staging
+  schedule:
+    interval: weekly
