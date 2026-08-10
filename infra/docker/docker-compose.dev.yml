@@ -1,0 +1,675 @@
+# =============================================================================
+# DOCKER COMPOSE — AMBIENTE DE DESENVOLVIMENTO — RESTAURANT APPS PLATFORM
+# =============================================================================
+# Sobe TODA a infraestrutura localmente (Postgres, Redis, RabbitMQ,
+# Meilisearch) + os 12 microsserviços com hot-reload (`uvicorn --reload` +
+# bind mount do código-fonte). Use `docker-compose.prod.yml` em produção —
+# lá o Postgres NÃO é containerizado (instância dedicada externa).
+#
+# Todas as variáveis de ambiente são injetadas a partir de `../../.env.dev`
+# (copie `.env.dev.example` -> `.env.dev` na raiz do repositório).
+# NENHUMA variável está hardcoded neste arquivo.
+#
+# Uso:
+#   cp .env.dev.example .env.dev
+#   docker compose -f infra/docker/docker-compose.dev.yml up -d --build
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Infraestrutura (containers locais, apenas em dev)
+  # ---------------------------------------------------------------------------
+
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: restaurant-postgres-dev
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${DB__PORT}:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ../scripts/create-service-databases.sh:/docker-entrypoint-initdb.d/10-create-service-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: restaurant-redis-dev
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: restaurant-meilisearch-dev
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_ENV: ${MEILI_ENV}
+    ports:
+      - "${MEILI_PORT}:7700"
+    volumes:
+      - meili_data_dev:/meili_data
+    healthcheck:
+      # 127.0.0.1 (não "localhost"): a imagem base do Meilisearch resolve
+      # "localhost" para ::1 (IPv6) primeiro via /etc/hosts, mas o servidor só
+      # escuta em 0.0.0.0 (IPv4) — "localhost" falha com connection refused
+      # mesmo com o servidor no ar.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: restaurant-rabbitmq-dev
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data_dev:/var/lib/rabbitmq
+
+  # ---------------------------------------------------------------------------
+  # Microsserviços Python (FastAPI + uv) — todos os 12
+  # ---------------------------------------------------------------------------
+
+  auth-service:
+    build:
+      context: ../..
+      dockerfile: services/auth-service/Dockerfile
+    container_name: auth-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${AUTH_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${AUTH_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${AUTH_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    ports:
+      - "${AUTH_SERVICE_PORT}:${AUTH_SERVICE_PORT}"
+    volumes:
+      - ../../services/auth-service/src:/app/services/auth-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${AUTH_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  restaurant-service:
+    build:
+      context: ../..
+      dockerfile: services/restaurant-service/Dockerfile
+    container_name: restaurant-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${RESTAURANT_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${RESTAURANT_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${RESTAURANT_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    ports:
+      - "${RESTAURANT_SERVICE_PORT}:${RESTAURANT_SERVICE_PORT}"
+    volumes:
+      - ../../services/restaurant-service/src:/app/services/restaurant-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${RESTAURANT_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  menu-service:
+    build:
+      context: ../..
+      dockerfile: services/menu-service/Dockerfile
+    container_name: menu-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${MENU_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${MENU_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${MENU_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+      - MEILISEARCH_URL=${MEILISEARCH_URL}
+      - MEILISEARCH_MASTER_KEY=${MEILI_MASTER_KEY}
+    ports:
+      - "${MENU_SERVICE_PORT}:${MENU_SERVICE_PORT}"
+    volumes:
+      - ../../services/menu-service/src:/app/services/menu-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${MENU_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      meilisearch:
+        condition: service_healthy
+
+  dining-service:
+    build:
+      context: ../..
+      dockerfile: services/dining-service/Dockerfile
+    container_name: dining-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${DINING_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${DINING_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${DINING_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    ports:
+      - "${DINING_SERVICE_PORT}:${DINING_SERVICE_PORT}"
+    volumes:
+      - ../../services/dining-service/src:/app/services/dining-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${DINING_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  kitchen-service:
+    build:
+      context: ../..
+      dockerfile: services/kitchen-service/Dockerfile
+    container_name: kitchen-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${KITCHEN_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${KITCHEN_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${KITCHEN_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    ports:
+      - "${KITCHEN_SERVICE_PORT}:${KITCHEN_SERVICE_PORT}"
+    volumes:
+      - ../../services/kitchen-service/src:/app/services/kitchen-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${KITCHEN_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  order-service:
+    build:
+      context: ../..
+      dockerfile: services/order-service/Dockerfile
+    container_name: order-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${ORDER_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${ORDERS_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${ORDERS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    ports:
+      - "${ORDER_SERVICE_PORT}:${ORDER_SERVICE_PORT}"
+    volumes:
+      - ../../services/order-service/src:/app/services/order-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${ORDER_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  inventory-service:
+    build:
+      context: ../..
+      dockerfile: services/inventory-service/Dockerfile
+    container_name: inventory-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${INVENTORY_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${INVENTORY_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${INVENTORY_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    ports:
+      - "${INVENTORY_SERVICE_PORT}:${INVENTORY_SERVICE_PORT}"
+    volumes:
+      - ../../services/inventory-service/src:/app/services/inventory-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${INVENTORY_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  payment-service:
+    build:
+      context: ../..
+      dockerfile: services/payment-service/Dockerfile
+    container_name: payment-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${PAYMENT_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${PAYMENTS_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${PAYMENTS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+      # Autoatendimento do cliente (US-05.4): valida a secret de QR Code da
+      # mesa contra o dining-service antes de aceitar um pagamento sem JWT.
+      # order-service/restaurant-service: computam o valor autoritativo da
+      # comanda no servidor, nunca confiando no que o cliente mandar
+      # (revisão de segurança, docs/logs/2026-08-10.md).
+      - DINING_SERVICE_URL=http://dining-service:${DINING_SERVICE_PORT}
+      - ORDER_SERVICE_URL=http://order-service:${ORDER_SERVICE_PORT}
+      - RESTAURANT_SERVICE_URL=http://restaurant-service:${RESTAURANT_SERVICE_PORT}
+    ports:
+      - "${PAYMENT_SERVICE_PORT}:${PAYMENT_SERVICE_PORT}"
+    volumes:
+      - ../../services/payment-service/src:/app/services/payment-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${PAYMENT_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  delivery-service:
+    build:
+      context: ../..
+      dockerfile: services/delivery-service/Dockerfile
+    container_name: delivery-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${DELIVERY_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${DELIVERY_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${DELIVERY_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    ports:
+      - "${DELIVERY_SERVICE_PORT}:${DELIVERY_SERVICE_PORT}"
+    volumes:
+      - ../../services/delivery-service/src:/app/services/delivery-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${DELIVERY_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  marketing-service:
+    build:
+      context: ../..
+      dockerfile: services/marketing-service/Dockerfile
+    container_name: marketing-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${MARKETING_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${MARKETING_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${MARKETING_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    ports:
+      - "${MARKETING_SERVICE_PORT}:${MARKETING_SERVICE_PORT}"
+    volumes:
+      - ../../services/marketing-service/src:/app/services/marketing-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${MARKETING_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  notification-service:
+    build:
+      context: ../..
+      dockerfile: services/notification-service/Dockerfile
+    container_name: notification-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${NOTIFICATION_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${NOTIFICATIONS_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${NOTIFICATIONS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    ports:
+      - "${NOTIFICATION_SERVICE_PORT}:${NOTIFICATION_SERVICE_PORT}"
+    volumes:
+      - ../../services/notification-service/src:/app/services/notification-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${NOTIFICATION_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  analytics-service:
+    build:
+      context: ../..
+      dockerfile: services/analytics-service/Dockerfile
+    container_name: analytics-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${ANALYTICS_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${ANALYTICS_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${ANALYTICS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    ports:
+      - "${ANALYTICS_SERVICE_PORT}:${ANALYTICS_SERVICE_PORT}"
+    volumes:
+      - ../../services/analytics-service/src:/app/services/analytics-service/src:ro
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "${ANALYTICS_SERVICE_PORT}", "--reload"]
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  # --- Workers (Dramatiq/Redis — ADR-002) -----------------------------------
+  # Três processos da mesma imagem (`workers/Dockerfile`), com `command:`
+  # diferente cada: o worker Dramatiq processa a fila; a bridge liga o evento
+  # `notification.requested` (RabbitMQ/Saga) ao Dramatiq; o agendador dispara
+  # o relatório diário via APScheduler.
+  dramatiq-worker:
+    build:
+      context: ../..
+      dockerfile: workers/Dockerfile
+    container_name: dramatiq-worker
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${WORKERS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+    volumes:
+      - ../../workers/src:/app/workers/src:ro
+    command: ["dramatiq", "src.async_tasks", "--processes", "1", "--threads", "4", "--watch", "src"]
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+
+  notification-bridge:
+    build:
+      context: ../..
+      dockerfile: workers/Dockerfile
+    container_name: notification-bridge
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${WORKERS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+    volumes:
+      - ../../workers/src:/app/workers/src:ro
+    command: ["python", "-m", "src.consumers.notification_bridge"]
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  scheduler:
+    build:
+      context: ../..
+      dockerfile: workers/Dockerfile
+    container_name: scheduler
+    restart: unless-stopped
+    env_file:
+      - ../../.env.dev
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${WORKERS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+    volumes:
+      - ../../workers/src:/app/workers/src:ro
+    command: ["python", "-m", "src.schedulers.daily_report_scheduler"]
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:
+  meili_data_dev:
+  rabbitmq_data_dev:

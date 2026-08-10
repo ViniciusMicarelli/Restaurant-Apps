@@ -1,0 +1,11 @@
+{
+  "name": "restaurant-apps-e2e",
+  "private": true,
+  "description": "Testes E2E Playwright da raiz do monorepo (docs/testing/test_strategy.md) — não confundir com os package.json individuais de cada apps/*.",
+  "scripts": {
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0"
+  }
+}

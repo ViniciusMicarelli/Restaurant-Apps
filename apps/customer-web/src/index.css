@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* White-Label — por tenant, injetado em runtime por
+       `theme/branding.ts` a partir de `GET /restaurants/{id}`. */
+    --brand-primary: #EA1D2C;
+    --brand-secondary: #1E293B;
+    --brand-accent: #059669;
+    --brand-bg: #F8FAFC;
+    --brand-surface: #FFFFFF;
+    --font-family: 'Inter', sans-serif;
+
+    /* Direção visual (2026-08-10, docs/logs/2026-08-10.md Sessão 8) — só
+       o texto/borda/estado é fixo; fundo e acento continuam vindo do
+       White-Label acima (não duplicamos, só referenciamos abaixo). */
+    --ink: #1b1e27;
+    --ink-soft: #565c6b;
+    --border: #dde0e6;
+    --good: #3f7d5c;
+    --good-soft: #e1efe7;
+    --warning: #a9781f;
+    --warning-soft: #f5ead1;
+    --critical: #b23a3a;
+    --critical-soft: #f6e1e1;
+  }
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--brand-bg);
+  color: var(--ink);
+}
+
+/* Ocultar barra de rolagem mantendo funcionalidade */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

@@ -1,0 +1,24 @@
+[project]
+name = "restaurant-events"
+version = "0.1.0"
+description = "Envelope de eventos de domínio e EventBus (RabbitMQ) para a Saga por coreografia"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.7.0",
+    "aio-pika>=9.4.0",
+    "restaurant-core",
+]
+
+[tool.uv.sources]
+restaurant-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/restaurant_events"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"

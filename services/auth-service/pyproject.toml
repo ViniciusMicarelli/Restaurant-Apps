@@ -1,0 +1,38 @@
+[project]
+name = "auth-service"
+version = "0.1.0"
+description = "Microsserviço de Autenticação, Usuários, Perfis, RBAC/ABAC e Validação de PINs"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.28.0",
+    "pydantic-settings>=2.2.1",
+    "sqlalchemy>=2.0.28",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.1",
+    "redis>=5.0.0",
+    "email-validator>=2.1.0",
+    "restaurant-core",
+    "restaurant-security",
+    "restaurant-database",
+    "restaurant-common",
+]
+
+[tool.uv.sources]
+restaurant-core = { workspace = true }
+restaurant-security = { workspace = true }
+restaurant-database = { workspace = true }
+restaurant-common = { workspace = true }
+
+[tool.uv]
+package = false
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+# "." (não "src") porque o código importa como `from src.domain...` — a raiz
+# do serviço precisa estar no path para que `src` seja um pacote importável.
+pythonpath = ["."]
+asyncio_mode = "auto"

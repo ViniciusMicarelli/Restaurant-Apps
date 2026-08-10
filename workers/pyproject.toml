@@ -1,0 +1,27 @@
+[project]
+name = "workers"
+version = "0.1.0"
+description = "Workers assíncronos (Dramatiq/Redis, ADR-002) e tarefas agendadas da plataforma"
+requires-python = ">=3.12"
+dependencies = [
+    "dramatiq[redis,watch]>=1.17.0",
+    "apscheduler>=3.10.4",
+    "pydantic-settings>=2.2.1",
+    "restaurant-common",
+    "restaurant-events",
+]
+
+[tool.uv.sources]
+restaurant-common = { workspace = true }
+restaurant-events = { workspace = true }
+
+[tool.uv]
+package = false
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: restaurant-platform-config
+  namespace: default
+data:
+  # Espelha .env.prod.example: Postgres é uma instância externa/gerenciada
+  # (DB__HOST aponta para fora do cluster), nunca um Service interno.
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  DB__PORT: "5432"
+  REDIS__HOST: "redis-service.default.svc.cluster.local"
+  REDIS__PORT: "6379"
+  MEILISEARCH_URL: "http://meilisearch-service.default.svc.cluster.local:7700"

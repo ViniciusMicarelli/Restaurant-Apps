@@ -1,0 +1,38 @@
+[project]
+name = "kitchen-service"
+version = "0.1.0"
+description = "Microsserviço de Cozinha, Kitchen Display System (KDS) em Tempo Real (WebSocket)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.28.0",
+    "pydantic-settings>=2.2.1",
+    "sqlalchemy>=2.0.28",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.1",
+    "pydantic>=2.7.0",
+    "websockets>=12.0",
+    "restaurant-core",
+    "restaurant-security",
+    "restaurant-database",
+    "restaurant-common",
+    "restaurant-events",
+]
+
+[tool.uv.sources]
+restaurant-core = { workspace = true }
+restaurant-security = { workspace = true }
+restaurant-database = { workspace = true }
+restaurant-common = { workspace = true }
+restaurant-events = { workspace = true }
+
+[tool.uv]
+package = false
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"

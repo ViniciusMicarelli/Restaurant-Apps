@@ -1,0 +1,718 @@
+# =============================================================================
+# DOCKER COMPOSE — AMBIENTE DE PRODUÇÃO — RESTAURANT APPS PLATFORM
+# =============================================================================
+# Diferenças deliberadas em relação a `docker-compose.dev.yml`:
+#   - NENHUM container de PostgreSQL: `DB__HOST`/`DB__PORT` (em `.env.prod`)
+#     apontam para uma instância gerenciada/dedicada externa.
+#   - Sem bind mount de código-fonte nem `--reload`: roda a imagem já
+#     construída (`CMD` padrão do Dockerfile via uvicorn sem --reload).
+#   - Serviços não publicam porta no host (`expose`, não `ports`) — apenas o
+#     Nginx (`infra/nginx/`) é exposto publicamente, atuando como gateway.
+#   - `restart: unless-stopped` + limites de recursos por serviço.
+#
+# Uso:
+#   cp .env.prod.example .env.prod   # preencher com os valores reais
+#   docker compose -f infra/docker/docker-compose.prod.yml up -d --build
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Infraestrutura de apoio (Postgres é EXTERNO — ver .env.prod)
+  # ---------------------------------------------------------------------------
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: restaurant-redis-prod
+    restart: unless-stopped
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: restaurant-meilisearch-prod
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_ENV: ${MEILI_ENV}
+    volumes:
+      - meili_data_prod:/meili_data
+    healthcheck:
+      # 127.0.0.1 (não "localhost"): a imagem base do Meilisearch resolve
+      # "localhost" para ::1 (IPv6) primeiro via /etc/hosts, mas o servidor só
+      # escuta em 0.0.0.0 (IPv4) — "localhost" falha com connection refused
+      # mesmo com o servidor no ar.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: restaurant-rabbitmq-prod
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    volumes:
+      - rabbitmq_data_prod:/var/lib/rabbitmq
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: restaurant-nginx-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - auth-service
+      - restaurant-service
+      - menu-service
+      - dining-service
+      - kitchen-service
+      - order-service
+      - inventory-service
+      - payment-service
+
+  # ---------------------------------------------------------------------------
+  # Microsserviços Python (FastAPI + uv) — todos os 12, sem porta publicada
+  # ---------------------------------------------------------------------------
+
+  auth-service:
+    build:
+      context: ../..
+      dockerfile: services/auth-service/Dockerfile
+    image: restaurant-apps/auth-service:${IMAGE_TAG:-latest}
+    container_name: auth-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${AUTH_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${AUTH_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${AUTH_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+      # Decisão de topologia de deploy, não config de operador — o
+      # auth-service em produção só é alcançável via o Nginx do API
+      # Gateway (nunca publicado direto, ver "expose" abaixo), então dá
+      # pra confiar no X-Forwarded-For que o Nginx acrescenta (revisão de
+      # segurança, docs/logs/2026-08-10.md).
+      - TRUST_PROXY_HEADERS=true
+    expose:
+      - "${AUTH_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  restaurant-service:
+    build:
+      context: ../..
+      dockerfile: services/restaurant-service/Dockerfile
+    image: restaurant-apps/restaurant-service:${IMAGE_TAG:-latest}
+    container_name: restaurant-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${RESTAURANT_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${RESTAURANT_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${RESTAURANT_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    expose:
+      - "${RESTAURANT_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  menu-service:
+    build:
+      context: ../..
+      dockerfile: services/menu-service/Dockerfile
+    image: restaurant-apps/menu-service:${IMAGE_TAG:-latest}
+    container_name: menu-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${MENU_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${MENU_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${MENU_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+      - MEILISEARCH_URL=${MEILISEARCH_URL}
+      - MEILISEARCH_MASTER_KEY=${MEILI_MASTER_KEY}
+    expose:
+      - "${MENU_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      meilisearch:
+        condition: service_healthy
+
+  dining-service:
+    build:
+      context: ../..
+      dockerfile: services/dining-service/Dockerfile
+    image: restaurant-apps/dining-service:${IMAGE_TAG:-latest}
+    container_name: dining-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${DINING_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${DINING_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${DINING_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    expose:
+      - "${DINING_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  kitchen-service:
+    build:
+      context: ../..
+      dockerfile: services/kitchen-service/Dockerfile
+    image: restaurant-apps/kitchen-service:${IMAGE_TAG:-latest}
+    container_name: kitchen-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${KITCHEN_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${KITCHEN_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${KITCHEN_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    expose:
+      - "${KITCHEN_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  order-service:
+    build:
+      context: ../..
+      dockerfile: services/order-service/Dockerfile
+    image: restaurant-apps/order-service:${IMAGE_TAG:-latest}
+    container_name: order-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${ORDER_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${ORDERS_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${ORDERS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    expose:
+      - "${ORDER_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  inventory-service:
+    build:
+      context: ../..
+      dockerfile: services/inventory-service/Dockerfile
+    image: restaurant-apps/inventory-service:${IMAGE_TAG:-latest}
+    container_name: inventory-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${INVENTORY_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${INVENTORY_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${INVENTORY_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    expose:
+      - "${INVENTORY_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  payment-service:
+    build:
+      context: ../..
+      dockerfile: services/payment-service/Dockerfile
+    image: restaurant-apps/payment-service:${IMAGE_TAG:-latest}
+    container_name: payment-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${PAYMENT_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${PAYMENTS_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${PAYMENTS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+      # Autoatendimento do cliente (US-05.4): valida a secret de QR Code da
+      # mesa contra o dining-service antes de aceitar um pagamento sem JWT.
+      # order-service/restaurant-service: computam o valor autoritativo da
+      # comanda no servidor, nunca confiando no que o cliente mandar
+      # (revisão de segurança, docs/logs/2026-08-10.md).
+      - DINING_SERVICE_URL=http://dining-service:${DINING_SERVICE_PORT}
+      - ORDER_SERVICE_URL=http://order-service:${ORDER_SERVICE_PORT}
+      - RESTAURANT_SERVICE_URL=http://restaurant-service:${RESTAURANT_SERVICE_PORT}
+    expose:
+      - "${PAYMENT_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  delivery-service:
+    build:
+      context: ../..
+      dockerfile: services/delivery-service/Dockerfile
+    image: restaurant-apps/delivery-service:${IMAGE_TAG:-latest}
+    container_name: delivery-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${DELIVERY_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${DELIVERY_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${DELIVERY_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    expose:
+      - "${DELIVERY_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  marketing-service:
+    build:
+      context: ../..
+      dockerfile: services/marketing-service/Dockerfile
+    image: restaurant-apps/marketing-service:${IMAGE_TAG:-latest}
+    container_name: marketing-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${MARKETING_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${MARKETING_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${MARKETING_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    expose:
+      - "${MARKETING_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  notification-service:
+    build:
+      context: ../..
+      dockerfile: services/notification-service/Dockerfile
+    image: restaurant-apps/notification-service:${IMAGE_TAG:-latest}
+    container_name: notification-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${NOTIFICATION_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${NOTIFICATIONS_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${NOTIFICATIONS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    expose:
+      - "${NOTIFICATION_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  analytics-service:
+    build:
+      context: ../..
+      dockerfile: services/analytics-service/Dockerfile
+    image: restaurant-apps/analytics-service:${IMAGE_TAG:-latest}
+    container_name: analytics-service
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - DEBUG=${DEBUG}
+      - PORT=${ANALYTICS_SERVICE_PORT}
+      - DB__HOST=${DB__HOST}
+      - DB__PORT=${DB__PORT}
+      - DB__USER=${DB__USER}
+      - DB__PASSWORD=${DB__PASSWORD}
+      - DB__NAME=${ANALYTICS_DB_NAME}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${ANALYTICS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS}
+    expose:
+      - "${ANALYTICS_SERVICE_PORT}"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  # --- Workers (Dramatiq/Redis — ADR-002) -----------------------------------
+  dramatiq-worker:
+    build:
+      context: ../..
+      dockerfile: workers/Dockerfile
+    image: restaurant-apps/workers:${IMAGE_TAG:-latest}
+    container_name: dramatiq-worker
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${WORKERS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+    command: ["dramatiq", "src.async_tasks", "--processes", "2", "--threads", "8"]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+
+  notification-bridge:
+    build:
+      context: ../..
+      dockerfile: workers/Dockerfile
+    image: restaurant-apps/workers:${IMAGE_TAG:-latest}
+    container_name: notification-bridge
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${WORKERS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+    command: ["python", "-m", "src.consumers.notification_bridge"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  scheduler:
+    build:
+      context: ../..
+      dockerfile: workers/Dockerfile
+    image: restaurant-apps/workers:${IMAGE_TAG:-latest}
+    container_name: scheduler
+    restart: unless-stopped
+    env_file:
+      - ../../.env.prod
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - REDIS__HOST=${REDIS_HOST}
+      - REDIS__PORT=${REDIS_PORT}
+      - REDIS__DB=${WORKERS_REDIS_DB}
+      - RABBITMQ__HOST=${RABBITMQ_HOST}
+      - RABBITMQ__PORT=${RABBITMQ_PORT}
+      - RABBITMQ__USER=${RABBITMQ_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASS}
+    command: ["python", "-m", "src.schedulers.daily_report_scheduler"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+    depends_on:
+      redis-cache:
+        condition: service_healthy
+
+volumes:
+  redis_data_prod:
+  meili_data_prod:
+  rabbitmq_data_prod:

@@ -1,0 +1,61 @@
+# --- Segredos / ambiente -----------------------------------------------------
+# Nunca commitar arquivos .env reais — apenas os `.env.*.example` versionados.
+.env
+.env.dev
+.env.prod
+.env.local
+.env.*.local
+
+# --- Python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+*.egg
+build/
+dist/
+
+# --- Node / Web -----------------------------------------------------------
+node_modules/
+dist/
+.vite/
+coverage/
+*.local
+
+# --- Flutter / Dart ---------------------------------------------------------
+apps/**/.dart_tool/
+apps/**/.flutter-plugins
+apps/**/.flutter-plugins-dependencies
+apps/**/build/
+apps/**/android/.gradle/
+apps/**/ios/Pods/
+apps/**/*.g.dart
+apps/**/*.freezed.dart
+
+# --- Infra / Docker ---------------------------------------------------------
+infra/**/*.log
+postgres_data/
+redis_data/
+meili_data/
+rabbitmq_data/
+
+# --- IDE / OS -----------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Uploads/artefatos locais de teste ---------------------------------------
+*.sqlite3
+htmlcov/
+.coverage
+
+# --- Playwright (tests/e2e/, raiz) -------------------------------------------
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
