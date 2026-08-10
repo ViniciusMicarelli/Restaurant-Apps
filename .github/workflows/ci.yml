@@ -26,7 +26,11 @@ env:
   UV_VERSION: "0.5.x"
   PYTHON_VERSION: "3.12"
   NODE_VERSION: "20"
-  FLUTTER_VERSION: "3.24.x"
+  # Pubspec dos 2 apps exige `sdk: ^3.12.1` (Dart) — precisa de um Flutter
+  # que já embarque esse Dart (confirmado local: Flutter 3.44.1 -> Dart
+  # 3.12.1). Achado ao vivo no primeiro CI real: "3.24.x" (bundla Dart
+  # 3.5.x) falha a resolução de dependências antes mesmo de rodar nada.
+  FLUTTER_VERSION: "3.44.x"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -88,6 +92,15 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
       - run: uv python install ${{ env.PYTHON_VERSION }}
+      # Workspace uv compartilha UM `.venv` na raiz — sem isso, `uv run`
+      # dentro de `matrix.dir` só resolve as deps daquele membro, sem os
+      # dev-dependencies da raiz (mypy/pytest/ruff) que os passos abaixo
+      # precisam. Localmente isso passava despercebido porque a raiz já
+      # tinha sido sincronizada antes em algum momento da sessão; num
+      # runner novo (CI) o `.venv` não existe ainda — precisa sincronizar
+      # explicitamente primeiro (mesmo passo que o job `lint` já fazia).
+      - name: Sync workspace (.venv compartilhado)
+        run: uv sync --frozen
       - name: mypy --strict
         working-directory: ${{ matrix.dir }}
         run: uv run mypy --strict src
