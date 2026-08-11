@@ -5,7 +5,7 @@ description = "Microsserviço de Marketing & Fidelidade — cupons de desconto"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110.0",
-    "uvicorn[standard]>=0.28.0",
+    "uvicorn[standard]>=0.52.1",
     "pydantic-settings>=2.15.0",
     "sqlalchemy>=2.0.28",
     "asyncpg>=0.29.0",

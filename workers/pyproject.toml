@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Workers assíncronos (Dramatiq/Redis, ADR-002) e tarefas agendadas da plataforma"
 requires-python = ">=3.12"
 dependencies = [
-    "dramatiq[redis,watch]>=1.17.0",
+    "dramatiq[redis,watch]>=2.2.0",
     "apscheduler>=3.10.4",
     "pydantic-settings>=2.15.0",
     "restaurant-common",
