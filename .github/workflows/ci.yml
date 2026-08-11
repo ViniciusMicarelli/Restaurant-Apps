@@ -70,7 +70,7 @@ jobs:
       python_shared: ${{ steps.filter.outputs.python_shared }}
       workflows: ${{ steps.filter.outputs.workflows }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -141,7 +141,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.workflows == 'true' || needs.changes.outputs.any_python == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
@@ -208,7 +208,7 @@ jobs:
           - { name: restaurant-common, dir: packages/common, mypy_target: packages/common/src/restaurant_common }
           - { name: restaurant-events, dir: packages/events, mypy_target: packages/events/src/restaurant_events }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
@@ -275,7 +275,7 @@ jobs:
       matrix:
         name: [admin-web, customer-web]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         with:
@@ -309,7 +309,7 @@ jobs:
       matrix:
         name: [waiter-mobile, customer-mobile]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         with:
@@ -375,7 +375,7 @@ jobs:
           - { name: admin-web, dockerfile: apps/admin-web/Dockerfile }
           - { name: customer-web, dockerfile: apps/customer-web/Dockerfile }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
         if: >-
           needs.changes.outputs.workflows == 'true' ||
