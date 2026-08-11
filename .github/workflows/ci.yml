@@ -381,7 +381,7 @@ jobs:
           needs.changes.outputs.workflows == 'true' ||
           needs.changes.outputs.python_shared == 'true' ||
           contains(fromJSON(needs.changes.outputs.changes), matrix.name)
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         if: >-
           needs.changes.outputs.workflows == 'true' ||
           needs.changes.outputs.python_shared == 'true' ||
