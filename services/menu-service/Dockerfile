@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # 2) Código-fonte do serviço.
 COPY services/menu-service/ /app/services/menu-service/
 
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 RUN useradd --create-home --uid 1000 appuser
 WORKDIR /app/services/menu-service
 COPY --from=builder /app /app
