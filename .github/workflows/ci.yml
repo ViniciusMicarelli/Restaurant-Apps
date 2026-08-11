@@ -25,7 +25,13 @@ concurrency:
 env:
   UV_VERSION: "0.5.x"
   PYTHON_VERSION: "3.12"
-  NODE_VERSION: "20"
+  # `npm ci` falhava só no CI ("Missing: esbuild@... from lock file") pro
+  # bump do vitest — reproduzido local: com Node 20 (npm ~10.x bundled) o
+  # `npm ci` rejeita um lockfile gerado por um npm mais novo; com Node 24
+  # (npm 11.13.0, o que já está instalado localmente) o mesmo lockfile
+  # instala limpo. Não era o lockfile que estava errado, era o Node do
+  # runner desatualizado em relação ao que gera os lockfiles hoje.
+  NODE_VERSION: "24"
   # Pubspec dos 2 apps exige `sdk: ^3.12.1` (Dart) — precisa de um Flutter
   # que já embarque esse Dart (confirmado local: Flutter 3.44.1 -> Dart
   # 3.12.1). Achado ao vivo no primeiro CI real: "3.24.x" (bundla Dart
