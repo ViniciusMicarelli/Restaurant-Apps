@@ -7,7 +7,7 @@
 # mesmo motivo dos `services/*/Dockerfile`: consistência de path nos COPY
 # abaixo. Ver `infra/docker/docker-compose.prod.yml`.
 
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 COPY apps/customer-web/package.json apps/customer-web/package-lock.json* ./
 RUN npm ci
