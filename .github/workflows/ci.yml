@@ -22,6 +22,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# `dorny/paths-filter` (job `changes`) cai pro fallback via API REST quando
+# `actions/checkout` não traz histórico suficiente pra um `git diff` local
+# (checkout raso, `fetch-depth` padrão = 1) — esse fallback lista os
+# arquivos alterados do PR via API, que precisa de `pull-requests: read`.
+# Sem essa permissão explícita, o `GITHUB_TOKEN` default do repo (o
+# workflow não declarava `permissions:` nenhuma) falhou com "Resource not
+# accessible by integration" — achado no primeiro PR real depois de
+# adicionar o filtro.
+permissions:
+  contents: read
+  pull-requests: read
+
 env:
   UV_VERSION: "0.5.x"
   PYTHON_VERSION: "3.12"
