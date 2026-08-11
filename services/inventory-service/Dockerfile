@@ -9,7 +9,7 @@
 #     context: ../..
 #     dockerfile: services/inventory-service/Dockerfile
 
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv
@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # 2) Código-fonte do serviço.
 COPY services/inventory-service/ /app/services/inventory-service/
 
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 RUN useradd --create-home --uid 1000 appuser
 WORKDIR /app/services/inventory-service
 COPY --from=builder /app /app
