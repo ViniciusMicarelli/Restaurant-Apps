@@ -7,7 +7,7 @@
 # mesmo motivo dos `services/*/Dockerfile`: consistência de path nos COPY
 # abaixo. Ver `infra/docker/docker-compose.prod.yml`.
 
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 COPY apps/admin-web/package.json apps/admin-web/package-lock.json* ./
 RUN npm ci
@@ -35,7 +35,7 @@ ENV VITE_AUTH_SERVICE_URL=${VITE_AUTH_SERVICE_URL} \
     VITE_CUSTOMER_WEB_URL=${VITE_CUSTOMER_WEB_URL}
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.31-alpine AS runtime
 COPY apps/admin-web/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
 # Porta dinâmica (Railway injeta `$PORT` em runtime) — o entrypoint padrão
