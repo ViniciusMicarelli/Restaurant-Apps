@@ -16,7 +16,9 @@ class CustomerApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final brandColor = AppTheme.colorFromHex(ref.watch(restaurantProvider).valueOrNull?.primaryColor);
+    // Riverpod 3: `AsyncValue.valueOrNull` foi removido — `.value` já
+    // retorna null em erro/loading, então é o substituto direto.
+    final brandColor = AppTheme.colorFromHex(ref.watch(restaurantProvider).value?.primaryColor);
 
     return MaterialApp(
       title: 'Cardápio Digital — Restaurant Apps',
