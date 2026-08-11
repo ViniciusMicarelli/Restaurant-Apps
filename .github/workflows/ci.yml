@@ -276,7 +276,7 @@ jobs:
         name: [admin-web, customer-web]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         with:
           node-version: ${{ env.NODE_VERSION }}
