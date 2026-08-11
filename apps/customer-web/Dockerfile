@@ -29,7 +29,7 @@ ENV VITE_RESTAURANT_SERVICE_URL=${VITE_RESTAURANT_SERVICE_URL} \
     VITE_DEFAULT_RESTAURANT_SLUG=${VITE_DEFAULT_RESTAURANT_SLUG}
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.31-alpine AS runtime
 COPY apps/customer-web/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
 # Porta dinâmica (Railway injeta `$PORT` em runtime) — o entrypoint padrão
