@@ -14,10 +14,19 @@ final sessionStorageProvider = Provider<SessionStorage>((ref) {
   return SessionStorage(ref.watch(sharedPreferencesProvider));
 });
 
-class SessionController extends StateNotifier<UserSession?> {
-  SessionController(this._storage) : super(_storage.load());
+// Riverpod 3: `StateNotifier` saiu do pacote principal — `Notifier` é o
+// substituto direto. Injeção de dependência muda de construtor (`this._storage`)
+// pra `build()` lendo via `ref.watch` (é assim que o `Notifier` acessa
+// `ref` — só existe depois que o provider é inicializado, não no
+// construtor, que agora é sempre sem argumentos).
+class SessionController extends Notifier<UserSession?> {
+  late final SessionStorage _storage;
 
-  final SessionStorage _storage;
+  @override
+  UserSession? build() {
+    _storage = ref.watch(sessionStorageProvider);
+    return _storage.load();
+  }
 
   Future<void> login(UserSession session) async {
     await _storage.save(session);
@@ -30,6 +39,5 @@ class SessionController extends StateNotifier<UserSession?> {
   }
 }
 
-final sessionControllerProvider = StateNotifierProvider<SessionController, UserSession?>((ref) {
-  return SessionController(ref.watch(sessionStorageProvider));
-});
+final sessionControllerProvider =
+    NotifierProvider<SessionController, UserSession?>(SessionController.new);
