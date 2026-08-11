@@ -2307,7 +2307,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "apscheduler", specifier = ">=3.10.4" },
-    { name = "dramatiq", extras = ["redis", "watch"], specifier = ">=1.17.0" },
+    { name = "dramatiq", extras = ["redis", "watch"], specifier = ">=2.2.0" },
     { name = "pydantic-settings", specifier = ">=2.2.1" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-events", editable = "packages/events" },
