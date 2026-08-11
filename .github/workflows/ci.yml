@@ -142,7 +142,7 @@ jobs:
     if: needs.changes.outputs.workflows == 'true' || needs.changes.outputs.any_python == 'true'
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
@@ -209,7 +209,7 @@ jobs:
           - { name: restaurant-events, dir: packages/events, mypy_target: packages/events/src/restaurant_events }
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
@@ -276,7 +276,7 @@ jobs:
         name: [admin-web, customer-web]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -376,12 +376,12 @@ jobs:
           - { name: customer-web, dockerfile: apps/customer-web/Dockerfile }
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
         if: >-
           needs.changes.outputs.workflows == 'true' ||
           needs.changes.outputs.python_shared == 'true' ||
           contains(fromJSON(needs.changes.outputs.changes), matrix.name)
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         if: >-
           needs.changes.outputs.workflows == 'true' ||
           needs.changes.outputs.python_shared == 'true' ||
