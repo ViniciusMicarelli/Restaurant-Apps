@@ -8,6 +8,58 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.
 
 ## [Unreleased] — 2026-08-10
 
+### Adicionado — CI/CD + preparação pra deploy na Railway
+* **Git inicializado nesta sessão** (repo vinculado a
+  `github.com/ViniciusMicarelli/Restaurant-Apps`) — commit inicial (todo o
+  código existente) na branch `main`, `staging` criada a partir dela, e
+  todo o trabalho desta seção numa branch de trabalho
+  (`chore/ci-and-railway-setup`), nunca commitado direto em `main`/`staging`.
+* **Dockerfiles ajustados pra Railway**: os 12 `services/*/Dockerfile`
+  tinham `CMD` em forma exec com porta hardcoded — a aplicação já lia
+  `PORT` corretamente via `BaseAppSettings`, só o Dockerfile ignorava.
+  Trocado pra forma shell (`CMD ["sh", "-c", "uvicorn ... --port
+  ${PORT:-XXXX}"]`), mesmo ajuste no `HEALTHCHECK`. Sem mudança de
+  comportamento em `docker compose` dev/prod (ambos sempre setam `PORT`
+  explicitamente) — verificado ao vivo (rebuild + restart do
+  `auth-service` no stack dev, `200 OK`) e via container standalone com
+  `PORT` customizado.
+* **`Dockerfile` novos**: `apps/admin-web` e `apps/customer-web` não
+  tinham nenhum — multi-stage `node:20-alpine` (build) → `nginx:1.27-alpine`
+  (serve `dist/` estático), porta via `${PORT}` resolvida em runtime pelo
+  entrypoint padrão da imagem Nginx (`envsubst` sobre
+  `nginx.conf.template`). `VITE_*` (embutido no bundle em build time, não
+  runtime) vira `ARG`/`ENV` no Dockerfile — documentado que precisa
+  marcar "Available at Build Time" na Railway. Testado com build real +
+  container rodando numa porta customizada (`200 OK`).
+* **`railway.json`** (config-as-code, formato oficial): um por serviço
+  deployável — 12 microsserviços, `admin-web`, `customer-web`, e 3
+  arquivos `workers/railway.<processo>.json` (o mesmo `workers/Dockerfile`
+  vira 3 serviços Railway via `deploy.startCommand` diferente, mesmo
+  padrão do `command:` já usado no `docker-compose.prod.yml`).
+  `deploy.healthcheckPath` de cada um reflete o path real (inclui a
+  inconsistência já conhecida `/health` vs `/health/check`).
+* **`.github/workflows/ci.yml`** (novo): lint (ruff, 1x pro workspace) +
+  `mypy --strict`/`pytest` por serviço/pacote/worker (matriz, 18
+  entradas — testes de integração usam SQLite em memória, sem precisar
+  de Postgres real no runner) + build/test dos 2 web apps + `flutter
+  analyze`/`test` dos 2 apps mobile + build Docker de amostra (sem push).
+  Roda em PR contra `staging`/`main` e em push nas duas.
+* **`.github/dependabot.yml`** (novo): `uv` (workspace), `npm`×3, `pub`×2,
+  `docker`×15, `github-actions` — todos mirando `staging`, passam pelo
+  mesmo CI antes de `main`.
+* **`.env.prod.example`**: corrigido pra incluir `VITE_*` que o código já
+  usava mas o arquivo nunca listou (`VITE_CUSTOMER_WEB_URL`,
+  `VITE_NOTIFICATION_SERVICE_URL`, `VITE_MENU_SERVICE_URL`,
+  `VITE_DEFAULT_RESTAURANT_SLUG`) — achado comparando com `grep -r VITE_
+  apps/*/src`.
+* **Novo `docs/deploy/railway_setup.md`**: guia completo pro painel da
+  Railway (plugins gerenciados, Shared Variables, tabela de
+  variáveis/healthcheck por serviço, ordem recomendada do primeiro
+  deploy) — não executável por mim (sem acesso ao painel), preparado pro
+  usuário aplicar manualmente. `infrastructure_strategy.md` atualizado
+  (seção CI/CD) pra refletir Railway em vez do deploy manual via SSH
+  descrito antes.
+
 ### Adicionado — Sistema de design estendido: Faturamento + apps Flutter
 * **`admin-web` Faturamento**: os 3 KPIs (Faturamento Total, Taxa de
   Serviço, Comandas Fechadas) agora usam o componente `StatTile` real em
