@@ -36,20 +36,32 @@ Todo serviço em `services/<x>/Dockerfile` usa build multi-stage com `uv`
 --no-dev`, estágio final copia apenas `/app/.venv` + código para uma imagem
 `python:3.12-slim-bookworm` — sem toolchain de build, < 150MB.
 
-## CI/CD (GitHub Actions)
+## CI/CD (GitHub Actions + Railway)
 
-Pipeline por PR (`CONTRIBUTING.md`):
-1. `ruff check .` + `ruff format --check .` em todo serviço/pacote alterado.
-2. `mypy --strict` em todo serviço/pacote alterado.
-3. `uv run pytest` (unit sempre; integration contra um Postgres de serviço
-   do próprio runner do Actions).
-4. `npm run lint && npm run type-check && npm run test` nos apps web afetados.
-5. `flutter analyze && flutter test` nos apps mobile afetados.
-6. Build da imagem Docker de cada serviço alterado (sem push em PR).
+Implementado em `.github/workflows/ci.yml` (2026-08-10) — roda em PR
+contra `staging`/`main` e em push direto nas duas:
+1. `ruff check .` + `ruff format --check .` (workspace inteiro, um job só).
+2. `mypy --strict` por serviço/pacote/worker (matriz — 12 microsserviços +
+   `workers` + 5 pacotes compartilhados).
+3. `uv run pytest` por serviço/pacote/worker — testes de integração usam
+   SQLite em memória (`conftest.py` de cada serviço), não depende de um
+   Postgres real no runner.
+4. `npm run build && npm test` nos 2 web apps (`build` já roda `tsc`).
+5. `flutter analyze && flutter test` nos 2 apps mobile.
+6. Build de imagem Docker de cada serviço/app (sem push) — valida que
+   todo `Dockerfile` continua correto.
 
-Merge em `main` dispara build + push de imagem versionada (tag = SHA curto)
-e, em produção, `docker compose -f infra/docker/docker-compose.prod.yml pull
-&& up -d` no host de destino.
+Dependências mantidas via Dependabot (`.github/dependabot.yml` — `uv`,
+`npm`×3, `pub`×2, `docker`×15, `github-actions`; tudo mirando `staging`,
+passa pelo mesmo CI antes de chegar em `main`).
+
+**Deploy**: Railway (branch `staging` → environment de staging, `main` →
+produção — redeploy automático a cada push, a Railway já observa o
+repositório). Não é mais `docker compose pull && up` manual num host —
+ver `docs/deploy/railway_setup.md` pro guia completo (17 serviços
+deployáveis, cada um com seu `railway.json` ao lado do `Dockerfile`).
+Todo `Dockerfile` de serviço/app lê a porta via `$PORT` dinâmico (ajuste
+necessário pra Railway — antes hardcodava a porta de dev).
 
 ## Observabilidade
 

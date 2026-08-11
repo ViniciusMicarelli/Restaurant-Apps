@@ -1,0 +1,23 @@
+# Template processado automaticamente pelo entrypoint padrão da imagem
+# `nginx:*-alpine` (`/docker-entrypoint.d/20-envsubst-on-templates.sh`) antes
+# do `nginx -g 'daemon off;'` — não precisa de CMD customizado no Dockerfile.
+# Só `$PORT` é substituído (é a única variável de ambiente com esse nome no
+# container; variáveis do próprio Nginx como `$uri`/`$host` não colidem,
+# `envsubst` só troca o que corresponde a uma env var real).
+server {
+    listen ${PORT};
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_types text/plain application/json application/javascript text/css;
+
+    # SPA sem client-side router hoje (navegação é por estado interno, não
+    # rota) — fallback pra index.html continua sendo a rede de segurança
+    # padrão de qualquer build estático servido por trás de um path direto.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

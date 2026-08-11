@@ -1,0 +1,222 @@
+# CI — Restaurant Apps Platform.
+#
+# Espelha a pipeline já documentada em docs/deploy/infrastructure_strategy.md
+# (§ CI/CD): lint + type-check + testes de cada serviço/pacote/app, depois
+# build de imagem Docker (sem push) como validação final. Roda em PR contra
+# `staging`/`main` e em push direto pra essas duas branches ("teste de build
+# na staging e na main").
+#
+# Testes de integração Python usam SQLite em memória (ver
+# `services/*/tests/integration/conftest.py`) — não precisam de um Postgres
+# real no runner.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [staging, main]
+  push:
+    branches: [staging, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.5.x"
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+  # Pubspec dos 2 apps exige `sdk: ^3.12.1` (Dart) — precisa de um Flutter
+  # que já embarque esse Dart (confirmado local: Flutter 3.44.1 -> Dart
+  # 3.12.1). Achado ao vivo no primeiro CI real: "3.24.x" (bundla Dart
+  # 3.5.x) falha a resolução de dependências antes mesmo de rodar nada.
+  FLUTTER_VERSION: "3.44.x"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint (uma vez só pro workspace inteiro — ruff é rápido e não é escopado
+  # por pacote, evita repetir a mesma varredura 17x na matriz abaixo).
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  # ---------------------------------------------------------------------------
+  # Type-check + testes — um job por serviço/pacote/worker (matriz).
+  # `pytest` sempre roda de dentro de `matrix.dir` (cada projeto resolve
+  # sua própria config via `pyproject.toml` local).
+  #
+  # `mypy` tem DOIS estilos de invocação, dependendo da categoria — não dá
+  # pra unificar num só, os dois foram testados ao vivo (local, reproduzindo
+  # o runner) e um quebra o outro:
+  #   - Serviços/`workers` (código interno usa `from src.x import y`,
+  #     prefixo "src." literal): `cd <dir> && mypy --strict src` — rodar
+  #     da RAIZ com o path completo (`mypy --strict services/x/src`)
+  #     resolve esse import errado nalguns casos (achado em `workers`:
+  #     dispara erros de tipo que não existem rodando do jeito certo).
+  #   - Pacotes compartilhados (`restaurant_core` etc., sem prefixo
+  #     "src."): o INVERSO — `cd packages/x && mypy --strict src` quebra
+  #     ("Source file found twice", mypy descobre o mesmo arquivo com dois
+  #     nomes de módulo via `mypy_path` da raiz); só funciona rodado da
+  #     raiz com o path completo até o pacote (`mypy --strict
+  #     packages/x/src/restaurant_x`). `mypy_target` fica vazio nos outros
+  #     — é o que decide qual dos dois passos abaixo roda.
+  # ---------------------------------------------------------------------------
+  python-services:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --- 12 microsserviços + workers (estilo "cd + src") ----------------
+          - { name: auth-service, dir: services/auth-service, mypy_target: "" }
+          - { name: restaurant-service, dir: services/restaurant-service, mypy_target: "" }
+          - { name: menu-service, dir: services/menu-service, mypy_target: "" }
+          - { name: dining-service, dir: services/dining-service, mypy_target: "" }
+          - { name: kitchen-service, dir: services/kitchen-service, mypy_target: "" }
+          - { name: order-service, dir: services/order-service, mypy_target: "" }
+          - { name: inventory-service, dir: services/inventory-service, mypy_target: "" }
+          - { name: payment-service, dir: services/payment-service, mypy_target: "" }
+          - { name: delivery-service, dir: services/delivery-service, mypy_target: "" }
+          - { name: marketing-service, dir: services/marketing-service, mypy_target: "" }
+          - { name: notification-service, dir: services/notification-service, mypy_target: "" }
+          - { name: analytics-service, dir: services/analytics-service, mypy_target: "" }
+          - { name: workers, dir: workers, mypy_target: "" }
+          # --- pacotes compartilhados (estilo "raiz + path completo") ---------
+          - { name: restaurant-core, dir: packages/core, mypy_target: packages/core/src/restaurant_core }
+          - { name: restaurant-security, dir: packages/security, mypy_target: packages/security/src/restaurant_security }
+          - { name: restaurant-database, dir: packages/database, mypy_target: packages/database/src/restaurant_database }
+          - { name: restaurant-common, dir: packages/common, mypy_target: packages/common/src/restaurant_common }
+          - { name: restaurant-events, dir: packages/events, mypy_target: packages/events/src/restaurant_events }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      # Workspace uv compartilha UM `.venv` na raiz — sem isso, `uv run`
+      # dentro de `matrix.dir` só resolve as deps daquele membro, sem os
+      # dev-dependencies da raiz (mypy/pytest/ruff) que os passos abaixo
+      # precisam. Localmente isso passava despercebido porque a raiz já
+      # tinha sido sincronizada antes em algum momento da sessão; num
+      # runner novo (CI) o `.venv` não existe ainda — precisa sincronizar
+      # explicitamente primeiro (mesmo passo que o job `lint` já fazia).
+      # `--all-packages` (não só a raiz): o mypy dos 5 pacotes compartilhados
+      # roda a partir da raiz (ver comentário acima) — sem essa flag, o
+      # `uv sync` sozinho só instala as deps do projeto raiz (`dependencies
+      # = []`, vazio), nunca as de cada pacote (`pydantic`, que o próprio
+      # `[tool.mypy] plugins = ["pydantic.mypy"]` da raiz precisa carregar).
+      # Os serviços não sofriam disso porque `cd services/x && uv run` já
+      # sincroniza aquele membro específico sozinho — só os pacotes,
+      # invocados da raiz, dependiam de tudo já estar instalado de antemão.
+      - name: Sync workspace (.venv compartilhado)
+        run: uv sync --frozen --all-packages
+      - name: mypy --strict (serviço/worker)
+        if: matrix.mypy_target == ''
+        working-directory: ${{ matrix.dir }}
+        run: uv run mypy --strict src
+      - name: mypy --strict (pacote compartilhado)
+        if: matrix.mypy_target != ''
+        run: uv run mypy --strict ${{ matrix.mypy_target }}
+      - name: pytest
+        working-directory: ${{ matrix.dir }}
+        run: uv run pytest
+
+  # ---------------------------------------------------------------------------
+  web-apps:
+    name: ${{ matrix.name }} (build + test)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [admin-web, customer-web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.name }}/package-lock.json
+      - working-directory: apps/${{ matrix.name }}
+        run: npm ci
+      - name: Build (tsc + vite build)
+        working-directory: apps/${{ matrix.name }}
+        run: npm run build
+      - name: Test (vitest)
+        working-directory: apps/${{ matrix.name }}
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  flutter-apps:
+    name: ${{ matrix.name }} (analyze + test)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [waiter-mobile, customer-mobile]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - working-directory: apps/${{ matrix.name }}
+        run: flutter pub get
+      - name: flutter analyze
+        working-directory: apps/${{ matrix.name }}
+        run: flutter analyze
+      - name: flutter test
+        working-directory: apps/${{ matrix.name }}
+        run: flutter test
+
+  # ---------------------------------------------------------------------------
+  # Build de imagem Docker de cada serviço/app — sem push (validação de que
+  # os Dockerfiles continuam corretos, mesmo passo já documentado em
+  # docs/deploy/infrastructure_strategy.md). Só roda depois que lint/
+  # type-check/testes passarem.
+  # ---------------------------------------------------------------------------
+  docker-build:
+    name: docker build (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    needs: [lint, python-services, web-apps]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: auth-service, dockerfile: services/auth-service/Dockerfile }
+          - { name: restaurant-service, dockerfile: services/restaurant-service/Dockerfile }
+          - { name: menu-service, dockerfile: services/menu-service/Dockerfile }
+          - { name: dining-service, dockerfile: services/dining-service/Dockerfile }
+          - { name: kitchen-service, dockerfile: services/kitchen-service/Dockerfile }
+          - { name: order-service, dockerfile: services/order-service/Dockerfile }
+          - { name: inventory-service, dockerfile: services/inventory-service/Dockerfile }
+          - { name: payment-service, dockerfile: services/payment-service/Dockerfile }
+          - { name: delivery-service, dockerfile: services/delivery-service/Dockerfile }
+          - { name: marketing-service, dockerfile: services/marketing-service/Dockerfile }
+          - { name: notification-service, dockerfile: services/notification-service/Dockerfile }
+          - { name: analytics-service, dockerfile: services/analytics-service/Dockerfile }
+          - { name: workers, dockerfile: workers/Dockerfile }
+          - { name: admin-web, dockerfile: apps/admin-web/Dockerfile }
+          - { name: customer-web, dockerfile: apps/customer-web/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
