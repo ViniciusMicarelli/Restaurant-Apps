@@ -120,7 +120,7 @@ requires-dist = [
     { name = "restaurant-events", editable = "packages/events" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -322,7 +322,7 @@ requires-dist = [
     { name = "restaurant-database", editable = "packages/database" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -534,7 +534,7 @@ requires-dist = [
     { name = "restaurant-database", editable = "packages/database" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -569,7 +569,7 @@ requires-dist = [
     { name = "restaurant-database", editable = "packages/database" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -870,7 +870,7 @@ requires-dist = [
     { name = "restaurant-events", editable = "packages/events" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -906,7 +906,7 @@ requires-dist = [
     { name = "restaurant-events", editable = "packages/events" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
     { name = "websockets", specifier = ">=12.0" },
 ]
 
@@ -1014,7 +1014,7 @@ requires-dist = [
     { name = "restaurant-database", editable = "packages/database" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -1129,7 +1129,7 @@ requires-dist = [
     { name = "restaurant-database", editable = "packages/database" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -1317,7 +1317,7 @@ requires-dist = [
     { name = "restaurant-events", editable = "packages/events" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -1354,7 +1354,7 @@ requires-dist = [
     { name = "restaurant-events", editable = "packages/events" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -1418,7 +1418,7 @@ requires-dist = [
     { name = "restaurant-database", editable = "packages/database" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]
@@ -1905,7 +1905,7 @@ requires-dist = [
     { name = "restaurant-database", editable = "packages/database" },
     { name = "restaurant-security", editable = "packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.28" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.28.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [[package]]

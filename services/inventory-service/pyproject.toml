@@ -5,7 +5,7 @@ description = "Microsserviço de Estoque, Ficha Técnica de Produtos e Baixa Aut
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110.0",
-    "uvicorn[standard]>=0.28.0",
+    "uvicorn[standard]>=0.52.1",
     "pydantic-settings>=2.2.1",
     "sqlalchemy>=2.0.28",
     "asyncpg>=0.29.0",
