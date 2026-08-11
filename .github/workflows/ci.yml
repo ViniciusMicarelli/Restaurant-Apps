@@ -22,10 +22,28 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# `dorny/paths-filter` (job `changes`) cai pro fallback via API REST quando
+# `actions/checkout` não traz histórico suficiente pra um `git diff` local
+# (checkout raso, `fetch-depth` padrão = 1) — esse fallback lista os
+# arquivos alterados do PR via API, que precisa de `pull-requests: read`.
+# Sem essa permissão explícita, o `GITHUB_TOKEN` default do repo (o
+# workflow não declarava `permissions:` nenhuma) falhou com "Resource not
+# accessible by integration" — achado no primeiro PR real depois de
+# adicionar o filtro.
+permissions:
+  contents: read
+  pull-requests: read
+
 env:
   UV_VERSION: "0.5.x"
   PYTHON_VERSION: "3.12"
-  NODE_VERSION: "20"
+  # `npm ci` falhava só no CI ("Missing: esbuild@... from lock file") pro
+  # bump do vitest — reproduzido local: com Node 20 (npm ~10.x bundled) o
+  # `npm ci` rejeita um lockfile gerado por um npm mais novo; com Node 24
+  # (npm 11.13.0, o que já está instalado localmente) o mesmo lockfile
+  # instala limpo. Não era o lockfile que estava errado, era o Node do
+  # runner desatualizado em relação ao que gera os lockfiles hoje.
+  NODE_VERSION: "24"
   # Pubspec dos 2 apps exige `sdk: ^3.12.1` (Dart) — precisa de um Flutter
   # que já embarque esse Dart (confirmado local: Flutter 3.44.1 -> Dart
   # 3.12.1). Achado ao vivo no primeiro CI real: "3.24.x" (bundla Dart
@@ -34,12 +52,94 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Detecta o que mudou — sem isso, todo PR (mesmo um bump de dependência
+  # trocando 1 arquivo) dispara os 38 jobs inteiros. Achado ao vivo: os 39
+  # PRs do Dependabot lotaram a fila de concorrência do Actions rodando
+  # tudo pra tudo. `changes` (saída padrão do `dorny/paths-filter`) é um
+  # array JSON com o nome de todo filtro que bateu — cada job/matriz abaixo
+  # só roda de verdade se o nome dele (`matrix.name`, igual ao nome do
+  # filtro correspondente) estiver nesse array, ou se algo "amplo" mudou
+  # (lockfile único do workspace, ou o workflow em si).
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detectar mudanças
+    runs-on: ubuntu-latest
+    outputs:
+      changes: ${{ steps.filter.outputs.changes }}
+      any_python: ${{ steps.filter.outputs.any_python }}
+      python_shared: ${{ steps.filter.outputs.python_shared }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            workflows:
+              - '.github/workflows/**'
+            any_python:
+              - 'services/**'
+              - 'packages/**'
+              - 'workers/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+            python_shared:
+              - 'pyproject.toml'
+              - 'uv.lock'
+            auth-service:
+              - 'services/auth-service/**'
+            restaurant-service:
+              - 'services/restaurant-service/**'
+            menu-service:
+              - 'services/menu-service/**'
+            dining-service:
+              - 'services/dining-service/**'
+            kitchen-service:
+              - 'services/kitchen-service/**'
+            order-service:
+              - 'services/order-service/**'
+            inventory-service:
+              - 'services/inventory-service/**'
+            payment-service:
+              - 'services/payment-service/**'
+            delivery-service:
+              - 'services/delivery-service/**'
+            marketing-service:
+              - 'services/marketing-service/**'
+            notification-service:
+              - 'services/notification-service/**'
+            analytics-service:
+              - 'services/analytics-service/**'
+            workers:
+              - 'workers/**'
+            restaurant-core:
+              - 'packages/core/**'
+            restaurant-security:
+              - 'packages/security/**'
+            restaurant-database:
+              - 'packages/database/**'
+            restaurant-common:
+              - 'packages/common/**'
+            restaurant-events:
+              - 'packages/events/**'
+            admin-web:
+              - 'apps/admin-web/**'
+            customer-web:
+              - 'apps/customer-web/**'
+            waiter-mobile:
+              - 'apps/waiter-mobile/**'
+            customer-mobile:
+              - 'apps/customer-mobile/**'
+
+  # ---------------------------------------------------------------------------
   # Lint (uma vez só pro workspace inteiro — ruff é rápido e não é escopado
   # por pacote, evita repetir a mesma varredura 17x na matriz abaixo).
   # ---------------------------------------------------------------------------
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true' || needs.changes.outputs.any_python == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -75,6 +175,14 @@ jobs:
   python-services:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    needs: changes
+    # Gate do JOB: roda pelo menos a etapa de setup se algo Python (de
+    # qualquer serviço/pacote) ou o workflow mudou. Qual ENTRADA da matriz
+    # faz trabalho de verdade é decidido por entrada, nos `if:` dos passos
+    # abaixo (`contains(changes, matrix.name)`) — sem isso, um bump que só
+    # mexe em `services/auth-service` ainda rodaria mypy/pytest dos outros
+    # 17 à toa.
+    if: needs.changes.outputs.workflows == 'true' || needs.changes.outputs.any_python == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -123,14 +231,33 @@ jobs:
       # invocados da raiz, dependiam de tudo já estar instalado de antemão.
       - name: Sync workspace (.venv compartilhado)
         run: uv sync --frozen --all-packages
+      # A entrada da matriz só faz trabalho de verdade se o workflow, o
+      # `uv.lock`/`pyproject.toml` raiz (afeta todo mundo), ou o diretório
+      # específico deste membro (`matrix.name`, mesmo nome do filtro em
+      # `changes`) mudou — senão os passos abaixo viram no-op (sucesso
+      # instantâneo, não consome tempo de fila de verdade).
       - name: mypy --strict (serviço/worker)
-        if: matrix.mypy_target == ''
+        if: >-
+          matrix.mypy_target == '' && (
+            needs.changes.outputs.workflows == 'true' ||
+            needs.changes.outputs.python_shared == 'true' ||
+            contains(fromJSON(needs.changes.outputs.changes), matrix.name)
+          )
         working-directory: ${{ matrix.dir }}
         run: uv run mypy --strict src
       - name: mypy --strict (pacote compartilhado)
-        if: matrix.mypy_target != ''
+        if: >-
+          matrix.mypy_target != '' && (
+            needs.changes.outputs.workflows == 'true' ||
+            needs.changes.outputs.python_shared == 'true' ||
+            contains(fromJSON(needs.changes.outputs.changes), matrix.name)
+          )
         run: uv run mypy --strict ${{ matrix.mypy_target }}
       - name: pytest
+        if: >-
+          needs.changes.outputs.workflows == 'true' ||
+          needs.changes.outputs.python_shared == 'true' ||
+          contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         working-directory: ${{ matrix.dir }}
         run: uv run pytest
 
@@ -138,6 +265,11 @@ jobs:
   web-apps:
     name: ${{ matrix.name }} (build + test)
     runs-on: ubuntu-latest
+    needs: changes
+    if: >-
+      needs.changes.outputs.workflows == 'true' ||
+      contains(fromJSON(needs.changes.outputs.changes), 'admin-web') ||
+      contains(fromJSON(needs.changes.outputs.changes), 'customer-web')
     strategy:
       fail-fast: false
       matrix:
@@ -145,16 +277,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: apps/${{ matrix.name }}/package-lock.json
-      - working-directory: apps/${{ matrix.name }}
+      - name: npm ci
+        if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
+        working-directory: apps/${{ matrix.name }}
         run: npm ci
       - name: Build (tsc + vite build)
+        if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         working-directory: apps/${{ matrix.name }}
         run: npm run build
       - name: Test (vitest)
+        if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         working-directory: apps/${{ matrix.name }}
         run: npm test
 
@@ -162,6 +299,11 @@ jobs:
   flutter-apps:
     name: ${{ matrix.name }} (analyze + test)
     runs-on: ubuntu-latest
+    needs: changes
+    if: >-
+      needs.changes.outputs.workflows == 'true' ||
+      contains(fromJSON(needs.changes.outputs.changes), 'waiter-mobile') ||
+      contains(fromJSON(needs.changes.outputs.changes), 'customer-mobile')
     strategy:
       fail-fast: false
       matrix:
@@ -169,15 +311,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
+        if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
-      - working-directory: apps/${{ matrix.name }}
+      - name: flutter pub get
+        if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
+        working-directory: apps/${{ matrix.name }}
         run: flutter pub get
       - name: flutter analyze
+        if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         working-directory: apps/${{ matrix.name }}
         run: flutter analyze
       - name: flutter test
+        if: needs.changes.outputs.workflows == 'true' || contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         working-directory: apps/${{ matrix.name }}
         run: flutter test
 
@@ -190,7 +337,24 @@ jobs:
   docker-build:
     name: docker build (${{ matrix.name }})
     runs-on: ubuntu-latest
-    needs: [lint, python-services, web-apps]
+    needs: [changes, lint, python-services, web-apps]
+    # `needs.<job>.result` em vez do `if: success()` implícito: com o
+    # filtro de mudanças, `lint`/`python-services`/`web-apps` ficam
+    # "skipped" (não "success") em PRs que não mexem em nada deles — o
+    # `if:` padrão trataria "skipped" como bloqueio e `docker-build`
+    # nunca rodaria num bump só de Dockerfile/Flutter. `always()` +
+    # aceitar success OU skipped em cada um resolve isso.
+    if: >-
+      always() &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      (needs.python-services.result == 'success' || needs.python-services.result == 'skipped') &&
+      (needs.web-apps.result == 'success' || needs.web-apps.result == 'skipped') &&
+      (
+        needs.changes.outputs.workflows == 'true' ||
+        needs.changes.outputs.any_python == 'true' ||
+        contains(fromJSON(needs.changes.outputs.changes), 'admin-web') ||
+        contains(fromJSON(needs.changes.outputs.changes), 'customer-web')
+      )
     strategy:
       fail-fast: false
       matrix:
@@ -213,7 +377,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+        if: >-
+          needs.changes.outputs.workflows == 'true' ||
+          needs.changes.outputs.python_shared == 'true' ||
+          contains(fromJSON(needs.changes.outputs.changes), matrix.name)
       - uses: docker/build-push-action@v6
+        if: >-
+          needs.changes.outputs.workflows == 'true' ||
+          needs.changes.outputs.python_shared == 'true' ||
+          contains(fromJSON(needs.changes.outputs.changes), matrix.name)
         with:
           context: .
           file: ${{ matrix.dockerfile }}
