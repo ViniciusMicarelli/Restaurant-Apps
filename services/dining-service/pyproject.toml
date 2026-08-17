@@ -5,7 +5,7 @@ description = "Microsserviço de Salão, Mesas, Comandas, Fila de Espera Virtual
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110.0",
-    "uvicorn[standard]>=0.52.1",
+    "uvicorn[standard]>=0.52.3",
     "pydantic-settings>=2.15.0",
     "sqlalchemy>=2.0.28",
     "asyncpg>=0.29.0",
