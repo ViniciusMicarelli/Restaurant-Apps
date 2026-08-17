@@ -113,7 +113,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
     { name = "restaurant-database", editable = "packages/database" },
@@ -315,7 +315,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "email-validator", specifier = ">=2.1.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
@@ -528,7 +528,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
     { name = "restaurant-database", editable = "packages/database" },
@@ -562,7 +562,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
@@ -863,7 +863,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
     { name = "restaurant-database", editable = "packages/database" },
@@ -899,7 +899,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
     { name = "restaurant-database", editable = "packages/database" },
@@ -1008,7 +1008,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
     { name = "restaurant-database", editable = "packages/database" },
@@ -1082,7 +1082,7 @@ wheels = [
 
 [[package]]
 name = "meilisearch-python-sdk"
-version = "7.4.1"
+version = "7.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -1090,9 +1090,9 @@ dependencies = [
     { name = "httpx2", extra = ["http2"] },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1b/67/b9654fcc2d78312c4b0dd0560d33a2348ad3b8a8f28ecb1e18c96446cc4b/meilisearch_python_sdk-7.4.1.tar.gz", hash = "sha256:71caeb3689ca26afad76e97c43f0bf7cd01f7a38318f1b2a86aa4fef692979e7", size = 243094, upload-time = "2026-07-30T00:11:19.592Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/f0/d6bdc61d03c5305a966693ddc42c3a15d9bf1847788039a281ded482e603/meilisearch_python_sdk-7.5.0.tar.gz", hash = "sha256:dcf16afd37a49a4e8a31ea9cb23fc66ca9eeda90e4406fd5020240a420f65983", size = 246323, upload-time = "2026-08-11T13:22:59.202Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9c/fb/0e699f9b2e3f70727e1d4b5413c4d47a87543b0037bce876f5074af4c07f/meilisearch_python_sdk-7.4.1-py3-none-any.whl", hash = "sha256:ec87566b9acbb6b086153ae5c34635d5e17868b4a4e828cb2c76dad6ff69cdaf", size = 80401, upload-time = "2026-07-30T00:11:18.413Z" },
+    { url = "https://files.pythonhosted.org/packages/20/18/3465e1bf857e000d8e2733aeadc75ac3eeaf1ffcdfa8a8a90db8852086b2/meilisearch_python_sdk-7.5.0-py3-none-any.whl", hash = "sha256:d02c8e0ab22943123b840b4e6e04907c3ffcabf3d493741bb0d769ec5b32015a", size = 80350, upload-time = "2026-08-11T13:22:58.029Z" },
 ]
 
 [[package]]
@@ -1120,9 +1120,9 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.13.1" },
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
-    { name = "meilisearch-python-sdk", specifier = ">=2.7.0" },
+    { name = "meilisearch-python-sdk", specifier = ">=7.5.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
@@ -1310,7 +1310,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
     { name = "restaurant-database", editable = "packages/database" },
@@ -1346,7 +1346,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
@@ -1411,7 +1411,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
@@ -1625,16 +1625,16 @@ wheels = [
 
 [[package]]
 name = "pydantic-settings"
-version = "2.14.2"
+version = "2.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/b5/8f48e906c3e0205276e8bd8cb7512217a87b2685304d64be27cad5b3019f/pydantic_settings-2.14.2.tar.gz", hash = "sha256:c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f", size = 237700, upload-time = "2026-06-19T13:44:56.324Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/68/ca/31c57507b13119d7d3cfa1576dad2911a4861e3be07b579395f4e9d393f9/pydantic_settings-2.15.0.tar.gz", hash = "sha256:694b793e84f766ba76a90ebdefc01d0a9a045dab0382bee70393da93712ad117", size = 261253, upload-time = "2026-08-07T09:24:57.419Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/77/c1/6e422f34e569cf8e18df68d1939c81c099d2b61e4f7d9621c8a77560799c/pydantic_settings-2.14.2-py3-none-any.whl", hash = "sha256:a20c97b37910b6550d5ea50fbcc2d4187defe58cd57070b73863d069419c9440", size = 61715, upload-time = "2026-06-19T13:44:55.02Z" },
+    { url = "https://files.pythonhosted.org/packages/30/a4/2bffa9f8e804325a09867f0e9d30795c80ea9f8d62560bd1b6ad6220eb2f/pydantic_settings-2.15.0-py3-none-any.whl", hash = "sha256:0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42", size = 69413, upload-time = "2026-08-07T09:24:55.839Z" },
 ]
 
 [[package]]
@@ -1795,7 +1795,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "restaurant-core", editable = "packages/core" },
 ]
 
@@ -1898,7 +1898,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-core", editable = "packages/core" },
@@ -2308,7 +2308,7 @@ dependencies = [
 requires-dist = [
     { name = "apscheduler", specifier = ">=3.10.4" },
     { name = "dramatiq", extras = ["redis", "watch"], specifier = ">=2.2.0" },
-    { name = "pydantic-settings", specifier = ">=2.2.1" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "restaurant-common", editable = "packages/common" },
     { name = "restaurant-events", editable = "packages/events" },
 ]
