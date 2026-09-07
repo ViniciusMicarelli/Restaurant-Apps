@@ -38,7 +38,7 @@ dependencies:
   # Estado (Clean Architecture: application layer) — docs/ai/architecture.md
   flutter_riverpod: ^3.4.2
   # Cliente HTTP para os microsserviços (auth/dining/menu/order-service)
-  dio: ^5.7.0
+  dio: ^5.11.1
   # Persistência local dos tokens JWT e do tenant_id da sessão
   shared_preferences: ^2.3.3
   # Animações Rive (loading + celebração de sucesso) — ver assets/animations/README.md
