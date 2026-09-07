@@ -38,7 +38,7 @@ dependencies:
   # Estado (Clean Architecture: application layer) — docs/ai/architecture.md
   flutter_riverpod: ^3.4.2
   # Cliente HTTP para restaurant-service/menu-service
-  dio: ^5.7.0
+  dio: ^5.11.1
   # Animações Rive (loading + celebração de sucesso) — ver assets/animations/README.md
   rive: ^0.14.11
 
