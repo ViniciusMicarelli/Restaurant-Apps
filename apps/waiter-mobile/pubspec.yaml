@@ -40,7 +40,7 @@ dependencies:
   # Cliente HTTP para os microsserviços (auth/dining/menu/order-service)
   dio: ^5.7.0
   # Persistência local dos tokens JWT e do tenant_id da sessão
-  shared_preferences: ^2.3.3
+  shared_preferences: ^2.5.6
   # Animações Rive (loading + celebração de sucesso) — ver assets/animations/README.md
   rive: ^0.14.11
 
